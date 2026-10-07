@@ -27,3 +27,4 @@ firmware/**/.pio/
 firmware/**/include/
 firmware/**/lib/
 images/
+
