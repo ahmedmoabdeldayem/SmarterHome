@@ -36,26 +36,26 @@ scp aws/certs/endpoint.txt pi@192.168.1.100:~/SmarterHome/aws/certs/
 
 **Install dependencies:**
 ```bash
-sudo apt install -y mosquitto mosquitto-clients python3-pip cmake build-essential libssl-dev git
+sudo apt install -y mosquitto mosquitto-clients cmake build-essential libssl-dev git
 sudo cp hub/config/mosquitto.conf /etc/mosquitto/conf.d/smarthome.conf
 sudo systemctl restart mosquitto
-
-pip3 install -r hub/config/requirements.txt
 ```
 
-**Build the C++ bridge:**
+**Build both C++ binaries (bridge + automation):**
 ```bash
-cd hub/bridge
+cd hub
 cmake -B build && cmake --build build -j$(nproc)
-# Binary will be at: hub/bridge/build/smarthome_bridge
-cd ../..
+# Binaries will be at:
+#   hub/build/smarthome_bridge
+#   hub/build/smarthome_automation
+cd ..
 ```
 
 **Run bridge and automation:**
 ```bash
 # Test manually first
-./hub/bridge/build/smarthome_bridge
-python3 hub/automation.py
+./hub/build/smarthome_bridge
+./hub/build/smarthome_automation
 
 # Then install as systemd services
 sudo cp hub/config/smarthome-bridge.service /etc/systemd/system/

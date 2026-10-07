@@ -132,10 +132,13 @@ no manual library installation needed.
 
 ---
 
-## What is the Automation Engine? (`hub/automation.py`)
+## What is the Automation Engine? (`hub/automation/`)
 
-A local rules engine. It subscribes to sensor topics on Mosquitto and
-automatically triggers actions based on rules you define.
+A local rules engine written in **C++**. It subscribes to sensor topics
+on Mosquitto and automatically triggers actions based on rules you define.
+
+Rules are defined in `hub/automation/src/rules.h` as a simple list —
+add or remove rules there with no changes needed anywhere else.
 
 Current rules:
 - Motion at entrance → turn on living room light
@@ -146,6 +149,8 @@ Current rules:
 **Why local?** If your internet goes down, AWS is unreachable and the
 bridge stops working. But the automation engine talks only to local
 Mosquitto — so these rules still fire even without internet.
+
+Built alongside the bridge from the root `hub/CMakeLists.txt`.
 
 ---
 
@@ -204,12 +209,20 @@ SmarterHome/
 │   ├── kitchen/                ← Light + gas sensor + energy sensor
 │   └── entrance/               ← Door lock + PIR motion + doorbell
 │
-├── hub/                        ← Python programs that run ON the Raspberry Pi
-│   ├── bridge.py               ← Mosquitto ↔ AWS IoT Core bridge
-│   ├── automation.py           ← Local automation rules engine
+├── hub/                        ← C++ programs that run ON the Raspberry Pi
+│   ├── CMakeLists.txt          ← Root build file (builds both binaries at once)
+│   ├── bridge/                 ← Mosquitto ↔ AWS IoT Core bridge
+│   │   ├── CMakeLists.txt
+│   │   └── src/
+│   │       ├── main.cpp        ← Bridge logic
+│   │       └── config.h        ← Endpoint, cert paths, topic settings
+│   ├── automation/             ← Local automation rules engine
+│   │   ├── CMakeLists.txt
+│   │   └── src/
+│   │       ├── main.cpp        ← Rule engine loop
+│   │       └── rules.h         ← All automation rules defined here
 │   └── config/
 │       ├── mosquitto.conf      ← MQTT broker configuration
-│       ├── requirements.txt    ← Python dependencies
 │       └── *.service           ← systemd service files (auto-start on boot)
 │
 ├── aws/

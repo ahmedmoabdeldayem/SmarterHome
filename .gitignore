@@ -26,3 +26,4 @@ scripts/rpi_os/
 firmware/**/.pio/
 firmware/**/include/
 firmware/**/lib/
+images/

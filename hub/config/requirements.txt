@@ -1,4 +1,0 @@
-# Python dependencies for automation engine only
-# (bridge is now a compiled C++ binary — see hub/bridge/)
-# Install with: pip3 install -r requirements.txt
-paho-mqtt>=1.6.1
