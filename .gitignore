@@ -1,0 +1,22 @@
+# AWS certificates and private keys — NEVER commit these
+aws/certs/
+hub/certs/
+*.pem
+*.key
+*.crt
+
+# Python
+__pycache__/
+*.pyc
+.env
+venv/
+
+# Flutter / Dart
+mobile_app/smarter_home/.dart_tool/
+mobile_app/smarter_home/.flutter-plugins
+mobile_app/smarter_home/.flutter-plugins-dependencies
+mobile_app/smarter_home/build/
+mobile_app/smarter_home/.packages
+
+# macOS
+.DS_Store

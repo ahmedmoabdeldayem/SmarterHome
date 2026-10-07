@@ -1,0 +1,17 @@
+[Unit]
+Description=SmarterHome AWS IoT Bridge
+After=network-online.target mosquitto.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/SmarterHome/hub
+ExecStart=/usr/bin/python3 /home/pi/SmarterHome/hub/bridge.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

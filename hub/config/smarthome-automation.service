@@ -1,0 +1,17 @@
+[Unit]
+Description=SmarterHome Local Automation Engine
+After=mosquitto.service
+Wants=mosquitto.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/SmarterHome/hub
+ExecStart=/usr/bin/python3 /home/pi/SmarterHome/hub/automation.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
