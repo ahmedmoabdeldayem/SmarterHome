@@ -16,19 +16,12 @@
  *   smarthome/living_room/status            → {"online":true}
  */
 
-#include <Arduino.h>
-#include <WiFi.h>
-#include <PubSubClient.h>
+#include <smarthome.h>
 #include <IRremoteESP8266.h>
 #include <IRsend.h>
 #include <ir_Coolix.h>
 #include <ArduinoJson.h>
 
-// ── Configuration ──────────────────────────────────────────────
-#define WIFI_SSID       "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"
-#define MQTT_BROKER     "192.168.1.100"
-#define MQTT_PORT       1883
 #define MQTT_CLIENT_ID  "esp32-living-room"
 
 #define RELAY_1  26
@@ -46,49 +39,44 @@
 
 #define ENERGY_REPORT_MS  5000
 
-// ── Globals ──────────────────────────────────────────────────────
-WiFiClient wifiClient;
+WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
-IRsend irSend(IR_TX_PIN);
+IRsend       irSend(IR_TX_PIN);
 
 unsigned long lastEnergyReport = 0;
 const int relayPins[4] = {RELAY_1, RELAY_2, RELAY_3, RELAY_4};
 
-// ── Forward declarations ─────────────────────────────────────────
-void connectWiFi();
-void connectMQTT();
 void onMessage(char* topic, byte* payload, unsigned int length);
 void sendACCommand(const char* mode, int temp);
 void sendTVCommand(const char* cmd);
 float readCurrentAmps();
 void reportEnergy();
+void subscribeTopics();
 
-// ── MQTT Callback ────────────────────────────────────────────────
+void subscribeTopics() {
+    mqtt.subscribe("smarthome/living_room/light/+/set");
+    mqtt.subscribe("smarthome/living_room/ac/set");
+    mqtt.subscribe("smarthome/living_room/tv/set");
+}
+
 void onMessage(char* topic, byte* payload, unsigned int length) {
     String topicStr(topic);
     JsonDocument doc;
-
     if (deserializeJson(doc, payload, length) != DeserializationError::Ok) return;
 
     for (int i = 1; i <= 4; i++) {
         if (topicStr == "smarthome/living_room/light/" + String(i) + "/set") {
-            bool on = strcmp(doc["state"], "on") == 0;
-            digitalWrite(relayPins[i - 1], on ? LOW : HIGH);
+            digitalWrite(relayPins[i - 1], strcmp(doc["state"], "on") == 0 ? LOW : HIGH);
             return;
         }
     }
-
     if (topicStr == "smarthome/living_room/ac/set") {
         sendACCommand(doc["mode"] | "off", doc["temp"] | 24);
-        return;
-    }
-
-    if (topicStr == "smarthome/living_room/tv/set") {
+    } else if (topicStr == "smarthome/living_room/tv/set") {
         sendTVCommand(doc["cmd"] | "");
     }
 }
 
-// ── IR Commands ──────────────────────────────────────────────────
 void sendACCommand(const char* mode, int temp) {
     IRCoolixAC ac(IR_TX_PIN);
     ac.begin();
@@ -105,13 +93,13 @@ void sendACCommand(const char* mode, int temp) {
 }
 
 void sendTVCommand(const char* cmd) {
-    if      (strcmp(cmd, "on")       == 0 || strcmp(cmd, "off") == 0) irSend.sendNEC(0xE0E040BF, 32);
+    if      (strcmp(cmd, "on")       == 0 ||
+             strcmp(cmd, "off")      == 0) irSend.sendNEC(0xE0E040BF, 32);
     else if (strcmp(cmd, "vol_up")   == 0) irSend.sendNEC(0xE0E0E01F, 32);
     else if (strcmp(cmd, "vol_down") == 0) irSend.sendNEC(0xE0E0D02F, 32);
     else if (strcmp(cmd, "mute")     == 0) irSend.sendNEC(0xE0E0F00F, 32);
 }
 
-// ── Energy Monitoring ─────────────────────────────────────────────
 float readCurrentAmps() {
     long sum = 0;
     for (int i = 0; i < 100; i++) {
@@ -125,62 +113,31 @@ float readCurrentAmps() {
 void reportEnergy() {
     float amps  = readCurrentAmps();
     float watts = amps * 220.0f;
-
     JsonDocument doc;
     doc["amps"]  = roundf(amps  * 100) / 100.0f;
     doc["watts"] = roundf(watts * 10)  / 10.0f;
-
     char buf[64];
     serializeJson(doc, buf);
     mqtt.publish("smarthome/living_room/energy/status", buf);
 }
 
-// ── WiFi & MQTT ──────────────────────────────────────────────────
-void connectWiFi() {
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    Serial.print("Connecting to WiFi");
-    while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
-    Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
-}
-
-void connectMQTT() {
-    while (!mqtt.connected()) {
-        Serial.print("Connecting to MQTT...");
-        if (mqtt.connect(MQTT_CLIENT_ID, nullptr, nullptr,
-                         "smarthome/living_room/status", 1, true,
-                         "{\"online\":false}")) {
-            Serial.println("connected");
-            mqtt.publish("smarthome/living_room/status", "{\"online\":true}", true);
-            mqtt.subscribe("smarthome/living_room/light/+/set");
-            mqtt.subscribe("smarthome/living_room/ac/set");
-            mqtt.subscribe("smarthome/living_room/tv/set");
-        } else {
-            Serial.printf("failed (rc=%d), retrying in 5s\n", mqtt.state());
-            delay(5000);
-        }
-    }
-}
-
-// ── Arduino Entry Points ─────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
-
     for (int i = 0; i < 4; i++) {
         pinMode(relayPins[i], OUTPUT);
         digitalWrite(relayPins[i], HIGH);
     }
-
     irSend.begin();
-    connectWiFi();
+    wifi_connect();
     mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     mqtt.setCallback(onMessage);
-    connectMQTT();
+    mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/living_room/status", subscribeTopics);
 }
 
 void loop() {
-    if (!mqtt.connected()) connectMQTT();
+    if (!mqtt.connected())
+        mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/living_room/status", subscribeTopics);
     mqtt.loop();
-
     if (millis() - lastEnergyReport > ENERGY_REPORT_MS) {
         lastEnergyReport = millis();
         reportEnergy();

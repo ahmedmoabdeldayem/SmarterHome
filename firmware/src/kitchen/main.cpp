@@ -16,15 +16,9 @@
  *   smarthome/kitchen/status           → {"online":true}
  */
 
-#include <Arduino.h>
-#include <WiFi.h>
-#include <PubSubClient.h>
+#include <smarthome.h>
 #include <ArduinoJson.h>
 
-#define WIFI_SSID       "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"
-#define MQTT_BROKER     "192.168.1.100"
-#define MQTT_PORT       1883
 #define MQTT_CLIENT_ID  "esp32-kitchen"
 
 #define RELAY_LIGHT_PIN    26
@@ -39,32 +33,31 @@
 
 #define SENSOR_REPORT_MS  3000
 
-WiFiClient wifiClient;
+WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
 
-unsigned long lastReport  = 0;
-bool gasAlertActive       = false;
+unsigned long lastReport   = 0;
+bool          gasAlertActive = false;
 
-void connectWiFi();
-void connectMQTT();
 void onMessage(char* topic, byte* payload, unsigned int length);
-int  readGasPPM();
+int   readGasPPM();
 float readCurrentAmps();
-void reportSensors();
+void  reportSensors();
+void  subscribeTopics();
+
+void subscribeTopics() {
+    mqtt.subscribe("smarthome/kitchen/light/set");
+}
 
 void onMessage(char* topic, byte* payload, unsigned int length) {
     JsonDocument doc;
     if (deserializeJson(doc, payload, length) != DeserializationError::Ok) return;
-
-    if (strcmp(topic, "smarthome/kitchen/light/set") == 0) {
-        bool on = strcmp(doc["state"], "on") == 0;
-        digitalWrite(RELAY_LIGHT_PIN, on ? LOW : HIGH);
-    }
+    if (strcmp(topic, "smarthome/kitchen/light/set") == 0)
+        digitalWrite(RELAY_LIGHT_PIN, strcmp(doc["state"], "on") == 0 ? LOW : HIGH);
 }
 
 int readGasPPM() {
-    int raw = analogRead(GAS_SENSOR_PIN);
-    return map(raw, 0, 4095, 0, 10000);
+    return map(analogRead(GAS_SENSOR_PIN), 0, 4095, 0, 10000);
 }
 
 float readCurrentAmps() {
@@ -78,55 +71,25 @@ float readCurrentAmps() {
 }
 
 void reportSensors() {
-    // Gas
     int  ppm   = readGasPPM();
     bool alert = ppm > 1000;
 
-    if (alert && !gasAlertActive) {
-        gasAlertActive = true;
-        digitalWrite(BUZZER_PIN, HIGH);
-    } else if (!alert && gasAlertActive) {
-        gasAlertActive = false;
-        digitalWrite(BUZZER_PIN, LOW);
-    }
+    if (alert && !gasAlertActive)  { gasAlertActive = true;  digitalWrite(BUZZER_PIN, HIGH); }
+    if (!alert && gasAlertActive)  { gasAlertActive = false; digitalWrite(BUZZER_PIN, LOW);  }
 
     {
         JsonDocument doc;
-        doc["ppm"]   = ppm;
-        doc["alert"] = alert;
-        char buf[64];
-        serializeJson(doc, buf);
+        doc["ppm"] = ppm; doc["alert"] = alert;
+        char buf[64]; serializeJson(doc, buf);
         mqtt.publish("smarthome/kitchen/gas/status", buf);
     }
-
-    // Energy
-    float amps  = readCurrentAmps();
-    float watts = amps * 220.0f;
     {
+        float amps = readCurrentAmps(), watts = amps * 220.0f;
         JsonDocument doc;
         doc["amps"]  = roundf(amps  * 100) / 100.0f;
         doc["watts"] = roundf(watts * 10)  / 10.0f;
-        char buf[64];
-        serializeJson(doc, buf);
+        char buf[64]; serializeJson(doc, buf);
         mqtt.publish("smarthome/kitchen/energy/status", buf);
-    }
-}
-
-void connectWiFi() {
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    while (WiFi.status() != WL_CONNECTED) delay(500);
-}
-
-void connectMQTT() {
-    while (!mqtt.connected()) {
-        if (mqtt.connect(MQTT_CLIENT_ID, nullptr, nullptr,
-                         "smarthome/kitchen/status", 1, true,
-                         "{\"online\":false}")) {
-            mqtt.publish("smarthome/kitchen/status", "{\"online\":true}", true);
-            mqtt.subscribe("smarthome/kitchen/light/set");
-        } else {
-            delay(5000);
-        }
     }
 }
 
@@ -136,15 +99,15 @@ void setup() {
     pinMode(BUZZER_PIN,         OUTPUT); digitalWrite(BUZZER_PIN,      LOW);
     pinMode(GAS_SENSOR_PIN,     INPUT);
     pinMode(CURRENT_SENSOR_PIN, INPUT);
-
-    connectWiFi();
+    wifi_connect();
     mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     mqtt.setCallback(onMessage);
-    connectMQTT();
+    mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/kitchen/status", subscribeTopics);
 }
 
 void loop() {
-    if (!mqtt.connected()) connectMQTT();
+    if (!mqtt.connected())
+        mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/kitchen/status", subscribeTopics);
     mqtt.loop();
     if (millis() - lastReport > SENSOR_REPORT_MS) {
         lastReport = millis();
