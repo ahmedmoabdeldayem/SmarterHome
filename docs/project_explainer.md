@@ -108,13 +108,13 @@ certificate.
 
 ---
 
-## What is the Bridge Daemon? (`hub/bridge.py`)
+## What is the Bridge Daemon? (`hub/bridge/`)
 
-The bridge is a Python program that runs on the RPi and connects to
-both brokers simultaneously:
+The bridge is a **C++ program** that runs on the RPi and connects to
+both brokers simultaneously using the Paho MQTT C++ library:
 
 ```
-Local Mosquitto ←──── bridge.py ────→ AWS IoT Core
+Local Mosquitto ←──── smarthome_bridge (C++) ────→ AWS IoT Core
 ```
 
 - When an ESP32 publishes a sensor reading locally, the bridge
@@ -125,6 +125,10 @@ Local Mosquitto ←──── bridge.py ────→ AWS IoT Core
 It also prevents **echo loops** — without that protection, a message
 forwarded to AWS would come back from AWS and be forwarded to local again,
 forever.
+
+It is built with CMake on the Raspberry Pi and runs as a systemd service.
+CMake automatically downloads and builds Paho MQTT C++ via FetchContent —
+no manual library installation needed.
 
 ---
 
