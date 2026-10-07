@@ -21,3 +21,8 @@ mobile_app/smarter_home/.packages
 # macOS
 .DS_Store
 scripts/rpi_os/
+
+# PlatformIO
+firmware/**/.pio/
+firmware/**/include/
+firmware/**/lib/
