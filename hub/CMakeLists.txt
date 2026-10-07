@@ -36,5 +36,19 @@ FetchContent_Declare(nlohmann_json
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# ── Tests ─────────────────────────────────────────────────────────────────────
+option(BUILD_TESTS "Build unit tests" ON)
+
+if(BUILD_TESTS)
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG        v1.14.0
+    )
+    FetchContent_MakeAvailable(googletest)
+    enable_testing()
+endif()
+
 # ── Subdirectories ─────────────────────────────────────────────────────────────
 add_subdirectory(automation)

@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  hub:
+    name: Hub C++ Build & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libssl-dev
+
+      - name: Configure
+        working-directory: hub
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON
+
+      - name: Build
+        working-directory: hub
+        run: cmake --build build --parallel $(nproc) --target test_rules
+
+      - name: Run tests
+        working-directory: hub/build
+        run: ctest --output-on-failure

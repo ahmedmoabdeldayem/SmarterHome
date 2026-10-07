@@ -22,9 +22,11 @@ mobile_app/smarter_home/.packages
 .DS_Store
 scripts/rpi_os/
 
-# PlatformIO
+# PlatformIO build artifacts
 firmware/**/.pio/
 firmware/**/include/
-firmware/**/lib/
 images/
+
+# Secrets — never commit
+firmware/lib/smarthome/secrets.h
 
