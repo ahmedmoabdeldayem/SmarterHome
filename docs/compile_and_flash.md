@@ -198,8 +198,8 @@ Subsequent builds are fast.
 
 Binaries will be at:
 ```
-hub/build/smarthome_bridge        ← MQTT bridge (local ↔ AWS)
-hub/build/smarthome_automation    ← local automation engine
+hub/build/bridge/smarthome_bridge           ← MQTT bridge (local ↔ AWS)
+hub/build/automation/smarthome_automation   ← local automation engine
 ```
 
 ### Run manually (for testing)
@@ -207,10 +207,10 @@ hub/build/smarthome_automation    ← local automation engine
 Open two SSH sessions and run one in each:
 ```bash
 # Session 1
-./hub/build/smarthome_bridge
+./hub/build/bridge/smarthome_bridge
 
 # Session 2
-./hub/build/smarthome_automation
+./hub/build/automation/smarthome_automation
 ```
 
 You should see `Connected to local Mosquitto broker` and `Connected to AWS IoT Core`.
