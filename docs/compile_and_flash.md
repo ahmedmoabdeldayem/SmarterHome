@@ -13,10 +13,9 @@ and how to flash/deploy it onto the correct hardware.
 | Bedroom firmware | C++ | PlatformIO | ESP32 (bedroom) |
 | Kitchen firmware | C++ | PlatformIO | ESP32 (kitchen) |
 | Entrance firmware | C++ | PlatformIO | ESP32 (entrance) |
-| MQTT Bridge | C++ | CMake | Raspberry Pi 4 |
 | Automation Engine | C++ | CMake | Raspberry Pi 4 |
 | Raspberry Pi OS | — | RPi Imager | Raspberry Pi 4 (microSD) |
-| Mobile App | Dart/Flutter | Flutter SDK | Android / iOS phone |
+| Mobile Dashboard | — | MQTT Dash (Play Store) | Android phone |
 
 ---
 
@@ -28,18 +27,15 @@ Everything else on the RPi runs on top of this.
 
 ### How to flash
 
-**Step 1 — Download the image**
-```bash
-chmod +x images/download_rpi_os.sh
-./images/download_rpi_os.sh
-# Image saved to: images/rpi_os/raspios-bookworm-arm64-lite.img.xz
-```
+**Step 1 — Download Raspberry Pi Imager**
 
-**Step 2 — Flash with Raspberry Pi Imager**
-1. Download Raspberry Pi Imager from `raspberrypi.com/software`
-2. Open Imager
-3. Click **Choose OS** → **Use custom** → select `images/rpi_os/raspios-bookworm-arm64-lite.img.xz`
-4. Click **Choose Storage** → select your microSD card (16GB+)
+Download from `raspberrypi.com/software` and install on your laptop.
+
+**Step 2 — Flash**
+1. Insert microSD card (16GB+) into your laptop
+2. Open Raspberry Pi Imager
+3. Click **Choose OS** → **Raspberry Pi OS Lite (64-bit)**
+4. Click **Choose Storage** → select your microSD card
 5. Click the **gear icon (⚙)** and configure:
    - Hostname: `smarthome-hub`
    - Enable SSH: yes
@@ -47,9 +43,9 @@ chmod +x images/download_rpi_os.sh
    - Password: *(choose a strong password)*
    - Wi-Fi SSID and password: *(your home network)*
 6. Click **Write** and wait for it to finish
-7. Insert the microSD into the Raspberry Pi and power it on
+7. Insert microSD into the Raspberry Pi and power on
 
-**Step 3 — Verify it booted**
+**Step 3 — Verify**
 ```bash
 ssh pi@smarthome-hub.local
 # You should get a shell prompt on the RPi
@@ -59,7 +55,7 @@ ssh pi@smarthome-hub.local
 
 ## 2. ESP32 Firmware
 
-All 4 ESP32 nodes are compiled from a single PlatformIO project located at `firmware/`.
+All 4 ESP32 nodes are compiled from a single PlatformIO project at `firmware/`.
 
 ### Prerequisites — install once on your laptop
 
@@ -67,22 +63,18 @@ All 4 ESP32 nodes are compiled from a single PlatformIO project located at `firm
 pip install platformio
 ```
 
-Or install the **PlatformIO IDE extension** in VSCode for a GUI experience.
+Or install the **PlatformIO IDE** extension in VSCode.
 
 ### Before compiling — fill in your settings
 
-Open each `firmware/src/<room>/main.cpp` and set:
+Open `firmware/lib/smarthome/smarthome.h` and set:
 ```cpp
-#define WIFI_SSID      "YOUR_WIFI_SSID"      // your home Wi-Fi name
-#define WIFI_PASSWORD  "YOUR_WIFI_PASSWORD"   // your home Wi-Fi password
+#define WIFI_SSID      "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD  "YOUR_WIFI_PASSWORD"
+#define MQTT_BROKER    "192.168.1.100"    // your Raspberry Pi's IP address
 ```
 
-Also set the `MQTT_BROKER` in `firmware/lib/smarthome/smarthome.h`:
-```cpp
-#define MQTT_BROKER    "192.168.1.100"        // your Raspberry Pi's IP address
-```
-
-To find the RPi's IP address:
+To find your RPi's IP:
 ```bash
 ssh pi@smarthome-hub.local "hostname -I"
 ```
@@ -94,7 +86,7 @@ cd firmware
 pio run
 ```
 
-This produces 4 binary images at:
+Binary images produced at:
 ```
 firmware/.pio/build/living_room/firmware.bin
 firmware/.pio/build/bedroom/firmware.bin
@@ -104,59 +96,44 @@ firmware/.pio/build/entrance/firmware.bin
 
 ### Flash each ESP32
 
-Connect the ESP32 to your laptop via USB, then run the matching command.
-Flash one ESP32 at a time.
+Connect each ESP32 to your laptop via USB, one at a time.
 
-**Living Room ESP32:**
 ```bash
 cd firmware
-pio run -e living_room --target upload
+pio run -e living_room --target upload    # Living Room ESP32
+pio run -e bedroom     --target upload    # Bedroom ESP32
+pio run -e kitchen     --target upload    # Kitchen ESP32
+pio run -e entrance    --target upload    # Entrance ESP32
 ```
 
-**Bedroom ESP32:**
+### Watch serial output (debugging)
+
 ```bash
-pio run -e bedroom --target upload
+pio device monitor -e living_room    # replace with the room you're debugging
 ```
 
-**Kitchen ESP32:**
-```bash
-pio run -e kitchen --target upload
-```
+You should see `WiFi connected` and `connected to MQTT`.
 
-**Entrance ESP32:**
-```bash
-pio run -e entrance --target upload
-```
-
-### Watch serial output (for debugging)
-
-After flashing, keep the USB connected and run:
-```bash
-pio device monitor -e living_room    # replace with the room you want to watch
-```
-
-You should see WiFi connected and MQTT connected printed to the terminal.
-
-### Useful extra commands
+### Other useful commands
 
 ```bash
-pio run --target clean               # delete build artifacts
-pio run -e bedroom                   # compile one node without flashing
-pio run -e kitchen --target upload && pio device monitor -e kitchen   # flash + monitor in one step
+pio run --target clean                    # delete build artifacts
+pio run -e bedroom                        # compile one node without flashing
+pio run -e kitchen --target upload && pio device monitor -e kitchen
 ```
 
 ---
 
-## 3. Raspberry Pi Hub (C++ Bridge + Automation Engine)
+## 3. Raspberry Pi Hub — Automation Engine
 
-Both C++ programs are built from `hub/` using CMake.
+The automation engine is a C++ program built with CMake.
 Run these commands **on the Raspberry Pi** (SSH in first).
 
 ### Prerequisites — install once on the RPi
 
 ```bash
 sudo apt update
-sudo apt install -y cmake build-essential libssl-dev git
+sudo apt install -y cmake build-essential git
 ```
 
 ### Copy the project to the RPi
@@ -166,26 +143,7 @@ From your laptop:
 scp -r /path/to/SmarterHome pi@smarthome-hub.local:~/SmarterHome
 ```
 
-Or clone from git if you have it hosted remotely.
-
-### Before building — fill in your AWS settings
-
-Edit `hub/bridge/src/config.h`:
-```cpp
-static constexpr const char* AWS_ENDPOINT    = "XXXX-ats.iot.us-east-1.amazonaws.com";
-static constexpr const char* AWS_CA_CERT     = "../certs/AmazonRootCA1.pem";
-static constexpr const char* AWS_DEVICE_CERT = "../certs/certificate.pem.crt";
-static constexpr const char* AWS_PRIVATE_KEY = "../certs/private.pem.key";
-```
-
-The endpoint is in `aws/certs/endpoint.txt` after running `aws/setup/provision.py`.
-The cert files come from `aws/certs/smarthome-hub/` — copy them to `hub/certs/`:
-```bash
-cp aws/certs/smarthome-hub/* hub/certs/
-cp aws/certs/AmazonRootCA1.pem hub/certs/
-```
-
-### Compile both binaries
+### Compile
 
 ```bash
 cd ~/SmarterHome/hub
@@ -193,120 +151,83 @@ cmake -B build
 cmake --build build -j$(nproc)
 ```
 
-First build takes several minutes (downloads and compiles Paho MQTT C++ from source).
+First build takes a few minutes (downloads and compiles Paho MQTT C++).
 Subsequent builds are fast.
 
-Binaries will be at:
+Binary at:
 ```
-hub/build/bridge/smarthome_bridge           ← MQTT bridge (local ↔ AWS)
-hub/build/automation/smarthome_automation   ← local automation engine
+hub/build/automation/smarthome_automation
 ```
 
 ### Run manually (for testing)
 
-Open two SSH sessions and run one in each:
 ```bash
-# Session 1
-./hub/build/bridge/smarthome_bridge
-
-# Session 2
 ./hub/build/automation/smarthome_automation
 ```
 
-You should see `Connected to local Mosquitto broker` and `Connected to AWS IoT Core`.
+You should see `Connected to local Mosquitto broker` and a list of subscribed topics.
 
-### Install as systemd services (run automatically on boot)
+### Install as systemd service (auto-start on boot)
 
 ```bash
-sudo cp ~/SmarterHome/hub/config/smarthome-bridge.service /etc/systemd/system/
 sudo cp ~/SmarterHome/hub/config/smarthome-automation.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable smarthome-bridge smarthome-automation
-sudo systemctl start smarthome-bridge smarthome-automation
+sudo systemctl enable smarthome-automation
+sudo systemctl start smarthome-automation
 ```
 
-**Check status:**
+**Useful service commands:**
 ```bash
-sudo systemctl status smarthome-bridge
-sudo systemctl status smarthome-automation
-```
-
-**View logs:**
-```bash
-journalctl -u smarthome-bridge -f
-journalctl -u smarthome-automation -f
-```
-
-**Restart after recompiling:**
-```bash
-sudo systemctl restart smarthome-bridge smarthome-automation
+sudo systemctl status smarthome-automation      # check if running
+journalctl -u smarthome-automation -f           # live logs
+sudo systemctl restart smarthome-automation     # restart after recompile
 ```
 
 ---
 
-## 4. Mobile App (Flutter)
+## 4. MQTT Dash (Android)
 
-### Prerequisites — install once on your laptop
+No compilation needed — download from the Play Store.
 
-1. Install Flutter SDK from `flutter.dev`
-2. Install Android Studio (for Android) or Xcode (for iOS)
-3. Run `flutter doctor` and follow any instructions it gives
+### Setup
+1. Install **MQTT Dash** from Play Store
+2. Open app → tap Menu (⋮) → **Import**
+3. Import `mqtt_dash/smarthome_dashboard.json` from this repo
+4. Tap the connection → set **Host** to your RPi's IP address
+5. Tap **Connect**
 
-### Before running — fill in your AWS settings
+All rooms and devices will appear as tiles. Tap a switch to control a device.
 
-Edit `mobile_app/smarter_home/lib/services/auth_service.dart`:
-```dart
-const _userPoolId = 'us-east-1_XXXXXXXXX';   // from AWS Cognito
-const _clientId   = 'XXXXXXXXXXXXXXXXXX';     // from AWS Cognito
-```
+### Manual setup (if import doesn't work)
+Create a new dashboard and add tiles manually:
 
-Edit `mobile_app/smarter_home/lib/services/mqtt_service.dart`:
-```dart
-const _awsEndpoint = 'XXXX-ats.iot.us-east-1.amazonaws.com';
-```
-
-### Run on a connected phone or emulator
-
-```bash
-cd mobile_app/smarter_home
-flutter pub get          # download dependencies (once)
-flutter run              # build and launch on connected device
-```
-
-### Build a release APK (Android)
-
-```bash
-flutter build apk --release
-# Output: mobile_app/smarter_home/build/app/outputs/flutter-apk/app-release.apk
-```
-
-Install on your phone:
-```bash
-flutter install          # installs the release APK on connected Android device
-```
-
-### Build for iOS
-
-```bash
-flutter build ios --release
-# Open mobile_app/smarter_home/ios/Runner.xcworkspace in Xcode to archive and deploy
-```
+| Device | Type | Publish topic | Subscribe topic | Payload ON | Payload OFF |
+|--------|------|--------------|-----------------|-----------|------------|
+| Living Room Light 1 | Switch | `smarthome/living_room/light/1/set` | `.../status` | `{"state":"on"}` | `{"state":"off"}` |
+| Living Room Light 2 | Switch | `smarthome/living_room/light/2/set` | `.../status` | `{"state":"on"}` | `{"state":"off"}` |
+| Living Room Light 3 | Switch | `smarthome/living_room/light/3/set` | `.../status` | `{"state":"on"}` | `{"state":"off"}` |
+| Living Room Light 4 | Switch | `smarthome/living_room/light/4/set` | `.../status` | `{"state":"on"}` | `{"state":"off"}` |
+| Bedroom Light 1 | Switch | `smarthome/bedroom/light/1/set` | `.../status` | `{"state":"on"}` | `{"state":"off"}` |
+| Bedroom Light 2 | Switch | `smarthome/bedroom/light/2/set` | `.../status` | `{"state":"on"}` | `{"state":"off"}` |
+| Kitchen Light | Switch | `smarthome/kitchen/light/set` | `.../status` | `{"state":"on"}` | `{"state":"off"}` |
+| Door Lock | Switch | `smarthome/entrance/door_lock/set` | `.../status` | `{"locked":false}` | `{"locked":true}` |
+| Bedroom Temp | Text | — | `smarthome/bedroom/climate/status` | — | — |
+| Kitchen Gas | Text | — | `smarthome/kitchen/gas/status` | — | — |
+| Motion | Text | — | `smarthome/entrance/motion/event` | — | — |
 
 ---
 
 ## Full Deployment Checklist
 
-Follow this order — each step depends on the previous one.
+Follow this order exactly.
 
 - [ ] **1.** Flash Raspberry Pi OS onto microSD and boot the RPi
-- [ ] **2.** SSH into RPi, run `aws/setup/provision.py` from your laptop to create AWS resources
-- [ ] **3.** Copy hub certs to `hub/certs/` on the RPi
-- [ ] **4.** Fill in `hub/bridge/src/config.h` with your AWS endpoint
-- [ ] **5.** Build hub C++ binaries on the RPi (`cmake -B build && cmake --build build`)
-- [ ] **6.** Install and start hub systemd services
-- [ ] **7.** Fill in Wi-Fi + MQTT broker IP in `firmware/lib/smarthome/smarthome.h`
-- [ ] **8.** Flash each ESP32 via USB (`pio run -e <room> --target upload`)
-- [ ] **9.** Verify each ESP32 shows `online: true` in MQTT (`mosquitto_sub -h localhost -t 'smarthome/#' -v`)
-- [ ] **10.** Verify bridge is forwarding to AWS (AWS Console → IoT Core → MQTT test client → subscribe to `smarthome/#`)
-- [ ] **11.** Fill in Cognito and AWS endpoint in the Flutter app
-- [ ] **12.** Run the mobile app and test end-to-end control
+- [ ] **2.** SSH into RPi and note its IP address (`hostname -I`)
+- [ ] **3.** Install Mosquitto on RPi and copy `mosquitto.conf`
+- [ ] **4.** Fill in `firmware/lib/smarthome/smarthome.h` with Wi-Fi credentials and RPi IP
+- [ ] **5.** Build automation engine on RPi (`cmake -B build && cmake --build build`)
+- [ ] **6.** Install and start automation systemd service
+- [ ] **7.** Flash each ESP32 via USB (`pio run -e <room> --target upload`)
+- [ ] **8.** Verify ESP32s appear online: `mosquitto_sub -h localhost -t 'smarthome/#' -v`
+- [ ] **9.** Set up MQTT Dash — import config, set RPi IP, connect
+- [ ] **10.** Test end-to-end: toggle a light in MQTT Dash → relay clicks

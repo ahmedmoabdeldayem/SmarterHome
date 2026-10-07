@@ -1,0 +1,196 @@
+{
+  "_readme": "Import this file into MQTT Dash: Menu → Import. Change 'broker_host' to your Raspberry Pi's IP address.",
+  "broker_host": "192.168.1.100",
+  "broker_port": 1883,
+  "client_id": "mqttdash-smarthome",
+  "dashboard_name": "SmarterHome",
+
+  "tiles": [
+
+    { "_section": "═══════════════ LIVING ROOM ═══════════════" },
+
+    {
+      "name": "Light 1",
+      "type": "switch",
+      "topic_pub": "smarthome/living_room/light/1/set",
+      "topic_sub": "smarthome/living_room/light/1/status",
+      "payload_on": "{\"state\":\"on\"}",
+      "payload_off": "{\"state\":\"off\"}",
+      "icon": "lightbulb"
+    },
+    {
+      "name": "Light 2",
+      "type": "switch",
+      "topic_pub": "smarthome/living_room/light/2/set",
+      "topic_sub": "smarthome/living_room/light/2/status",
+      "payload_on": "{\"state\":\"on\"}",
+      "payload_off": "{\"state\":\"off\"}",
+      "icon": "lightbulb"
+    },
+    {
+      "name": "Light 3",
+      "type": "switch",
+      "topic_pub": "smarthome/living_room/light/3/set",
+      "topic_sub": "smarthome/living_room/light/3/status",
+      "payload_on": "{\"state\":\"on\"}",
+      "payload_off": "{\"state\":\"off\"}",
+      "icon": "lightbulb"
+    },
+    {
+      "name": "Light 4",
+      "type": "switch",
+      "topic_pub": "smarthome/living_room/light/4/set",
+      "topic_sub": "smarthome/living_room/light/4/status",
+      "payload_on": "{\"state\":\"on\"}",
+      "payload_off": "{\"state\":\"off\"}",
+      "icon": "lightbulb"
+    },
+    {
+      "name": "AC",
+      "type": "button_group",
+      "buttons": [
+        { "label": "Cool 22°C", "topic_pub": "smarthome/living_room/ac/set", "payload": "{\"mode\":\"cool\",\"temp\":22}" },
+        { "label": "Cool 24°C", "topic_pub": "smarthome/living_room/ac/set", "payload": "{\"mode\":\"cool\",\"temp\":24}" },
+        { "label": "Fan",       "topic_pub": "smarthome/living_room/ac/set", "payload": "{\"mode\":\"fan\",\"temp\":24}" },
+        { "label": "Off",       "topic_pub": "smarthome/living_room/ac/set", "payload": "{\"mode\":\"off\"}" }
+      ]
+    },
+    {
+      "name": "TV",
+      "type": "button_group",
+      "buttons": [
+        { "label": "Power",    "topic_pub": "smarthome/living_room/tv/set", "payload": "{\"cmd\":\"on\"}" },
+        { "label": "Vol +",    "topic_pub": "smarthome/living_room/tv/set", "payload": "{\"cmd\":\"vol_up\"}" },
+        { "label": "Vol -",    "topic_pub": "smarthome/living_room/tv/set", "payload": "{\"cmd\":\"vol_down\"}" },
+        { "label": "Mute",     "topic_pub": "smarthome/living_room/tv/set", "payload": "{\"cmd\":\"mute\"}" }
+      ]
+    },
+    {
+      "name": "Energy",
+      "type": "text",
+      "topic_sub": "smarthome/living_room/energy/status",
+      "value_path": "watts",
+      "unit": "W"
+    },
+
+    { "_section": "═══════════════ BEDROOM ═══════════════" },
+
+    {
+      "name": "Light 1",
+      "type": "switch",
+      "topic_pub": "smarthome/bedroom/light/1/set",
+      "topic_sub": "smarthome/bedroom/light/1/status",
+      "payload_on": "{\"state\":\"on\"}",
+      "payload_off": "{\"state\":\"off\"}",
+      "icon": "lightbulb"
+    },
+    {
+      "name": "Light 2",
+      "type": "switch",
+      "topic_pub": "smarthome/bedroom/light/2/set",
+      "topic_sub": "smarthome/bedroom/light/2/status",
+      "payload_on": "{\"state\":\"on\"}",
+      "payload_off": "{\"state\":\"off\"}",
+      "icon": "lightbulb"
+    },
+    {
+      "name": "AC",
+      "type": "button_group",
+      "buttons": [
+        { "label": "Cool 22°C", "topic_pub": "smarthome/bedroom/ac/set", "payload": "{\"mode\":\"cool\",\"temp\":22}" },
+        { "label": "Cool 24°C", "topic_pub": "smarthome/bedroom/ac/set", "payload": "{\"mode\":\"cool\",\"temp\":24}" },
+        { "label": "Fan",       "topic_pub": "smarthome/bedroom/ac/set", "payload": "{\"mode\":\"fan\",\"temp\":24}" },
+        { "label": "Off",       "topic_pub": "smarthome/bedroom/ac/set", "payload": "{\"mode\":\"off\"}" }
+      ]
+    },
+    {
+      "name": "Temperature",
+      "type": "text",
+      "topic_sub": "smarthome/bedroom/climate/status",
+      "value_path": "temp",
+      "unit": "°C"
+    },
+    {
+      "name": "Humidity",
+      "type": "text",
+      "topic_sub": "smarthome/bedroom/climate/status",
+      "value_path": "humidity",
+      "unit": "%"
+    },
+
+    { "_section": "═══════════════ KITCHEN ═══════════════" },
+
+    {
+      "name": "Light",
+      "type": "switch",
+      "topic_pub": "smarthome/kitchen/light/set",
+      "topic_sub": "smarthome/kitchen/light/status",
+      "payload_on": "{\"state\":\"on\"}",
+      "payload_off": "{\"state\":\"off\"}",
+      "icon": "lightbulb"
+    },
+    {
+      "name": "Gas (PPM)",
+      "type": "text",
+      "topic_sub": "smarthome/kitchen/gas/status",
+      "value_path": "ppm",
+      "unit": "ppm"
+    },
+    {
+      "name": "Gas Alert",
+      "type": "text",
+      "topic_sub": "smarthome/kitchen/gas/status",
+      "value_path": "alert"
+    },
+    {
+      "name": "Energy",
+      "type": "text",
+      "topic_sub": "smarthome/kitchen/energy/status",
+      "value_path": "watts",
+      "unit": "W"
+    },
+
+    { "_section": "═══════════════ ENTRANCE ═══════════════" },
+
+    {
+      "name": "Door Lock",
+      "type": "switch",
+      "topic_pub": "smarthome/entrance/door_lock/set",
+      "topic_sub": "smarthome/entrance/door_lock/status",
+      "payload_on": "{\"locked\":false}",
+      "payload_off": "{\"locked\":true}",
+      "label_on": "Unlocked",
+      "label_off": "Locked",
+      "icon": "lock"
+    },
+    {
+      "name": "Motion",
+      "type": "text",
+      "topic_sub": "smarthome/entrance/motion/event",
+      "value_path": "detected"
+    },
+    {
+      "name": "Doorbell",
+      "type": "text",
+      "topic_sub": "smarthome/entrance/doorbell/event",
+      "value_path": "pressed"
+    },
+
+    { "_section": "═══════════════ ALERTS ═══════════════" },
+
+    {
+      "name": "Gas Alert",
+      "type": "text",
+      "topic_sub": "smarthome/alerts/gas",
+      "value_path": "ppm",
+      "unit": "ppm"
+    },
+    {
+      "name": "Doorbell Alert",
+      "type": "text",
+      "topic_sub": "smarthome/alerts/doorbell",
+      "value_path": "message"
+    }
+
+  ]
+}
