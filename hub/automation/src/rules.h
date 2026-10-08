@@ -34,7 +34,7 @@ struct Rule {
 // ── Rule definitions ──────────────────────────────────────────────────────────
 // Add or remove rules here. No changes needed anywhere else.
 
-static std::vector<Rule> build_rules() {
+inline std::vector<Rule> build_rules() {
     return {
         {
             .trigger_topic  = "smarthome/entrance/motion/event",
@@ -55,7 +55,12 @@ static std::vector<Rule> build_rules() {
             },
             .action_topic   = "smarthome/alerts/gas",
             .action_payload = [](const json& p) -> json {
-                return {{"room", "kitchen"}, {"ppm", p.value("ppm", 0)}, {"alert", true}};
+                int ppm = p.value("ppm", 0);
+                if (ppm < 0 || ppm > 10000) {
+                    return {{"room", "kitchen"}, {"fault", true},
+                            {"message", "Gas sensor reading out of range"}};
+                }
+                return {{"room", "kitchen"}, {"ppm", ppm}, {"alert", true}};
             },
             .cooldown       = std::chrono::milliseconds(10000),
             .description    = "Gas alert in kitchen → broadcast gas alert",

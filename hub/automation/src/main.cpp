@@ -20,7 +20,9 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdlib>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -31,10 +33,16 @@
 using json = nlohmann::json;
 
 // ── Config ────────────────────────────────────────────────────────────────────
-static constexpr const char* BROKER_URI  = "tcp://localhost:1883";
-static constexpr const char* CLIENT_ID   = "smarthome-automation";
-static constexpr int         KEEPALIVE   = 30;
-static constexpr int         RECONNECT_MS = 5000;
+static const std::string BROKER_URI  = []() -> std::string {
+    const char* env = std::getenv("BROKER_URI");
+    return env ? env : "tcp://localhost:1883";
+}();
+static const std::string CLIENT_ID   = []() -> std::string {
+    const char* env = std::getenv("CLIENT_ID");
+    return env ? env : "smarthome-automation";
+}();
+static constexpr int KEEPALIVE    = 30;
+static constexpr int RECONNECT_MS = 5000;
 
 #define LOG(level, msg) \
     std::cout << "[" level "] " << msg << std::endl
@@ -42,6 +50,7 @@ static constexpr int         RECONNECT_MS = 5000;
 // ── Globals ───────────────────────────────────────────────────────────────────
 static std::atomic<bool> g_running{true};
 static std::vector<Rule> g_rules = build_rules();
+static std::mutex        g_rules_mutex;
 
 // topic → indices of rules that watch it
 static std::unordered_map<std::string, std::vector<size_t>> g_topic_index;
@@ -92,20 +101,31 @@ public:
             bool should_fire = false;
             try {
                 should_fire = rule.condition(payload);
+            } catch (const std::exception& e) {
+                LOG("ERROR", "Condition threw in rule '" << rule.description << "': " << e.what());
+                continue;
             } catch (...) {
+                LOG("ERROR", "Condition threw unknown exception in rule '" << rule.description << "'");
                 continue;
             }
             if (!should_fire) continue;
 
-            // Check cooldown
-            if (now - rule.last_fired < rule.cooldown) continue;
-            rule.last_fired = now;
+            // Check cooldown (mutex guards last_fired read + write)
+            {
+                std::lock_guard<std::mutex> lock(g_rules_mutex);
+                if (now - rule.last_fired < rule.cooldown) continue;
+                rule.last_fired = now;
+            }
 
             // Build action payload
             json action;
             try {
                 action = rule.action_payload(payload);
+            } catch (const std::exception& e) {
+                LOG("ERROR", "action_payload threw in rule '" << rule.description << "': " << e.what());
+                continue;
             } catch (...) {
+                LOG("ERROR", "action_payload threw unknown exception in rule '" << rule.description << "'");
                 continue;
             }
 
@@ -168,13 +188,21 @@ int main() {
             LOG("WARN", "Disconnected, reconnecting...");
             try {
                 client.reconnect()->wait();
-            } catch (...) {}
+            } catch (const std::exception& e) {
+                LOG("ERROR", "Reconnect failed: " << e.what());
+            } catch (...) {
+                LOG("ERROR", "Reconnect failed: unknown exception");
+            }
         }
     }
 
     try {
         client.disconnect()->wait();
-    } catch (...) {}
+    } catch (const std::exception& e) {
+        LOG("ERROR", "Disconnect failed: " << e.what());
+    } catch (...) {
+        LOG("ERROR", "Disconnect failed: unknown exception");
+    }
 
     LOG("INFO", "Automation engine stopped.");
     return 0;
