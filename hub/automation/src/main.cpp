@@ -95,6 +95,14 @@ public:
         auto now = std::chrono::steady_clock::now();
 
         for (size_t idx : it->second) {
+            // Hold the mutex for the entire rule processing block.
+            // rule.condition, rule.action_payload, rule.action_topic, and
+            // rule.last_fired are all fields of the same Rule struct. Although
+            // g_rules is never structurally modified after init (no push_back /
+            // erase), last_fired IS written here and read/written by concurrent
+            // callbacks, so the lock must cover all accesses to that rule.
+            std::lock_guard<std::mutex> lock(g_rules_mutex);
+
             Rule& rule = g_rules[idx];
 
             // Check condition
@@ -110,12 +118,9 @@ public:
             }
             if (!should_fire) continue;
 
-            // Check cooldown (mutex guards last_fired read + write)
-            {
-                std::lock_guard<std::mutex> lock(g_rules_mutex);
-                if (now - rule.last_fired < rule.cooldown) continue;
-                rule.last_fired = now;
-            }
+            // Check cooldown
+            if (now - rule.last_fired < rule.cooldown) continue;
+            rule.last_fired = now;
 
             // Build action payload
             json action;
@@ -145,7 +150,8 @@ private:
 
 // ── Signal handler ────────────────────────────────────────────────────────────
 static void on_signal(int) {
-    LOG("INFO", "Shutting down automation engine...");
+    // Do NOT call LOG (std::cout) here — it is not async-signal-safe.
+    // The main loop logs the shutdown message after g_running becomes false.
     g_running = false;
 }
 
@@ -161,7 +167,9 @@ int main() {
     mqtt::connect_options opts;
     opts.set_keep_alive_interval(KEEPALIVE);
     opts.set_clean_session(false);
-    opts.set_automatic_reconnect(true);
+    // Automatic reconnect is intentionally disabled: the manual reconnect loop
+    // below handles reconnection. Enabling both would cause Paho and the loop
+    // to race each other on disconnect.
 
     AutomationCallback cb(client);
     client.set_callback(cb);

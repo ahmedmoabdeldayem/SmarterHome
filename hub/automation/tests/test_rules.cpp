@@ -54,6 +54,20 @@ TEST_F(RulesTest, KitchenGasAlertPayloadIncludesPpm) {
     EXPECT_EQ(payload["room"], "kitchen");
 }
 
+TEST_F(RulesTest, KitchenGasAlertPayloadFaultOnNegativePpm) {
+    auto& rule = find_rule("smarthome/kitchen/gas/status");
+    auto payload = rule.action_payload({{"ppm", -1}});
+    EXPECT_EQ(payload["fault"], true);
+    EXPECT_FALSE(payload.contains("alert"));
+}
+
+TEST_F(RulesTest, KitchenGasAlertPayloadFaultOnPpmAboveMax) {
+    auto& rule = find_rule("smarthome/kitchen/gas/status");
+    auto payload = rule.action_payload({{"ppm", 10001}});
+    EXPECT_EQ(payload["fault"], true);
+    EXPECT_FALSE(payload.contains("alert"));
+}
+
 // ── Bedroom climate ───────────────────────────────────────────────────────────
 
 TEST_F(RulesTest, BedroomClimateFiresAbove28) {

@@ -1,7 +1,7 @@
 [Unit]
 Description=SmarterHome Local Automation Engine
 After=mosquitto.service
-Wants=mosquitto.service
+BindsTo=mosquitto.service
 
 [Service]
 Type=simple
