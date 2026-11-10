@@ -54,6 +54,14 @@ void subscribeTopics();
 
 void subscribeTopics() {
     mqtt.subscribe("smarthome/entrance/door_lock/set");
+
+    // Republish the current lock state as retained after every (re)connect so
+    // the broker's retained message always reflects the live hardware state.
+    JsonDocument doc;
+    doc["locked"] = isLocked;
+    char buf[32];
+    serializeJson(doc, buf);
+    mqtt.publish("smarthome/entrance/door_lock/status", buf, true);
 }
 
 void setLock(bool locked) {
@@ -126,12 +134,9 @@ void setup() {
     wifi_connect();
     mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     mqtt.setCallback(onMessage);
+    // subscribeTopics() publishes the current lock state as retained, so there
+    // is no need for a separate publish here.
     mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/entrance/status", subscribeTopics);
-
-    JsonDocument doc;
-    doc["locked"] = isLocked;
-    char buf[32]; serializeJson(doc, buf);
-    mqtt.publish("smarthome/entrance/door_lock/status", buf, true);
 }
 
 void loop() {

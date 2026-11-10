@@ -13,7 +13,10 @@ void wifi_connect() {
 void wifi_ensure_connected() {
     if (WiFi.status() == WL_CONNECTED) return;
     Serial.println("WiFi lost, reconnecting...");
+    // A brief delay lets the driver fully tear down before begin() is issued,
+    // avoiding a race between the async disconnect completion and begin().
     WiFi.disconnect();
+    delay(100);
     wifi_connect();
 }
 
@@ -23,8 +26,10 @@ void mqtt_connect(PubSubClient& client,
                   void        (*subscribe_fn)()) {
     while (!client.connected()) {
         Serial.printf("Connecting to MQTT as %s...", client_id);
+        // Use client_id as the MQTT username so each node gets its own ACL slot.
+        // The broker must have an account for each client_id (e.g. esp32-living-room).
         if (client.connect(client_id,
-                           MQTT_USER, MQTT_PASSWORD,
+                           client_id, MQTT_PASSWORD,
                            status_topic, 1, true,
                            "{\"online\":false}")) {
             Serial.println("connected");

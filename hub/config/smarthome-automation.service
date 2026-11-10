@@ -7,6 +7,9 @@ BindsTo=mosquitto.service
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/SmarterHome/hub
+# Set MQTT_USER and MQTT_PASS to the smarthome-automation Mosquitto account credentials.
+# Example: EnvironmentFile=/etc/smarthome/automation.env  (file contains MQTT_USER=... MQTT_PASS=...)
+EnvironmentFile=-/etc/smarthome/automation.env
 ExecStart=/home/pi/SmarterHome/hub/build/automation/smarthome_automation
 Restart=always
 RestartSec=5

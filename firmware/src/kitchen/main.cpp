@@ -111,10 +111,17 @@ void setup() {
     pinMode(BUZZER_PIN,         OUTPUT); digitalWrite(BUZZER_PIN,      LOW);
     pinMode(GAS_SENSOR_PIN,     INPUT);
     pinMode(CURRENT_SENSOR_PIN, INPUT);
+    // 11 dB attenuation required for ACS712: its zero-current output is 2.5 V,
+    // which exceeds the default 0 dB ceiling (~1.1 V) and would saturate the ADC.
+    analogSetPinAttenuation(CURRENT_SENSOR_PIN, ADC_11db);
     wifi_connect();
     mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     mqtt.setCallback(onMessage);
     mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/kitchen/status", subscribeTopics);
+
+    // Publish initial relay state as retained so the dashboard reflects the correct
+    // state immediately after a power cycle (relay starts HIGH = off).
+    mqtt.publish("smarthome/kitchen/light/status", "{\"state\":\"off\"}", true);
 }
 
 void loop() {

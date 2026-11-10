@@ -41,6 +41,14 @@ static const std::string CLIENT_ID   = []() -> std::string {
     const char* env = std::getenv("CLIENT_ID");
     return env ? env : "smarthome-automation";
 }();
+static const std::string MQTT_USER   = []() -> std::string {
+    const char* env = std::getenv("MQTT_USER");
+    return env ? env : "";
+}();
+static const std::string MQTT_PASS   = []() -> std::string {
+    const char* env = std::getenv("MQTT_PASS");
+    return env ? env : "";
+}();
 static constexpr int KEEPALIVE    = 30;
 static constexpr int RECONNECT_MS = 5000;
 
@@ -122,9 +130,9 @@ public:
 
                 // Check cooldown
                 if (now - rule.last_fired < rule.cooldown) continue;
-                rule.last_fired = now;
 
-                // Build action payload
+                // Build action payload before stamping last_fired so a throwing
+                // action_payload does not consume the cooldown with no delivery.
                 json action;
                 try {
                     action = rule.action_payload(payload);
@@ -135,6 +143,8 @@ public:
                     LOG("ERROR", "action_payload threw unknown exception in rule '" << rule.description << "'");
                     continue;
                 }
+
+                rule.last_fired = now;
 
                 pub_topic   = rule.action_topic;
                 pub_payload = action.dump();
@@ -174,6 +184,10 @@ int main() {
     mqtt::connect_options opts;
     opts.set_keep_alive_interval(KEEPALIVE);
     opts.set_clean_session(false);
+    if (!MQTT_USER.empty()) {
+        opts.set_user_name(MQTT_USER);
+        opts.set_password(MQTT_PASS);
+    }
     // Automatic reconnect is intentionally disabled: the manual reconnect loop
     // below handles reconnection. Enabling both would cause Paho and the loop
     // to race each other on disconnect.

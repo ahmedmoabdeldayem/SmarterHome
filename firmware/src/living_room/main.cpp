@@ -18,6 +18,7 @@
 
 #include <smarthome.h>
 #include <IRremoteESP8266.h>
+#include <IRsend.h>
 #include <ir_Coolix.h>
 #include <ArduinoJson.h>
 
@@ -137,11 +138,21 @@ void setup() {
         pinMode(relayPins[i], OUTPUT);
         digitalWrite(relayPins[i], HIGH);
     }
+    // 11 dB attenuation required for ACS712: its zero-current output is 2.5 V,
+    // which exceeds the default 0 dB ceiling (~1.1 V) and would saturate the ADC.
+    analogSetPinAttenuation(CURRENT_SENSOR_PIN, ADC_11db);
     acSend.begin();
     wifi_connect();
     mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     mqtt.setCallback(onMessage);
     mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/living_room/status", subscribeTopics);
+
+    // Publish initial relay states as retained so the dashboard shows the correct
+    // state immediately after a power cycle (all relays start HIGH = off).
+    for (int i = 1; i <= 4; i++) {
+        String statusTopic = "smarthome/living_room/light/" + String(i) + "/status";
+        mqtt.publish(statusTopic.c_str(), "{\"state\":\"off\"}", true);
+    }
 }
 
 void loop() {
