@@ -41,8 +41,11 @@
 
 WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
-// IRCoolixAC inherits IRsend, so a single object handles both AC and raw NEC commands.
+// Two globals on the same pin: each claims its own ESP32 RMT channel (the GPIO
+// is shared). Both are initialised once in setup() to avoid per-call begin()
+// exhausting the 8 available RMT channels.
 IRCoolixAC   acSend(IR_TX_PIN);
+IRsend       irSend(IR_TX_PIN);
 
 unsigned long lastEnergyReport = 0;
 const int relayPins[4] = {RELAY_1, RELAY_2, RELAY_3, RELAY_4};
@@ -102,10 +105,10 @@ void sendACCommand(const char* mode, int temp) {
 
 void sendTVCommand(const char* cmd) {
     if      (strcmp(cmd, "on")       == 0 ||
-             strcmp(cmd, "off")      == 0) acSend.sendNEC(0xE0E040BF, 32);
-    else if (strcmp(cmd, "vol_up")   == 0) acSend.sendNEC(0xE0E0E01F, 32);
-    else if (strcmp(cmd, "vol_down") == 0) acSend.sendNEC(0xE0E0D02F, 32);
-    else if (strcmp(cmd, "mute")     == 0) acSend.sendNEC(0xE0E0F00F, 32);
+             strcmp(cmd, "off")      == 0) irSend.sendNEC(0xE0E040BF, 32);
+    else if (strcmp(cmd, "vol_up")   == 0) irSend.sendNEC(0xE0E0E01F, 32);
+    else if (strcmp(cmd, "vol_down") == 0) irSend.sendNEC(0xE0E0D02F, 32);
+    else if (strcmp(cmd, "mute")     == 0) irSend.sendNEC(0xE0E0F00F, 32);
 }
 
 float readCurrentAmps() {
@@ -142,6 +145,7 @@ void setup() {
     // which exceeds the default 0 dB ceiling (~1.1 V) and would saturate the ADC.
     analogSetPinAttenuation(CURRENT_SENSOR_PIN, ADC_11db);
     acSend.begin();
+    irSend.begin();
     wifi_connect();
     mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     mqtt.setCallback(onMessage);
