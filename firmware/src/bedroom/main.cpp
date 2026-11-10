@@ -56,7 +56,16 @@ void onMessage(char* topic, byte* payload, unsigned int length) {
 
     for (int i = 1; i <= 2; i++) {
         if (topicStr == "smarthome/bedroom/light/" + String(i) + "/set") {
-            digitalWrite(relayPins[i - 1], strcmp(doc["state"], "on") == 0 ? LOW : HIGH);
+            const char* state = doc["state"] | "off";
+            bool on = strcmp(state, "on") == 0;
+            digitalWrite(relayPins[i - 1], on ? LOW : HIGH);
+
+            JsonDocument statusDoc;
+            statusDoc["state"] = on ? "on" : "off";
+            char statusBuf[32];
+            serializeJson(statusDoc, statusBuf);
+            mqtt.publish(("smarthome/bedroom/light/" + String(i) + "/status").c_str(),
+                         statusBuf, true);
             return;
         }
     }
@@ -104,9 +113,17 @@ void setup() {
     mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     mqtt.setCallback(onMessage);
     mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/bedroom/status", subscribeTopics);
+
+    // Publish initial relay states as retained so the dashboard reflects the correct
+    // state immediately after a power cycle (all relays start HIGH = off).
+    for (int i = 1; i <= 2; i++) {
+        String statusTopic = "smarthome/bedroom/light/" + String(i) + "/status";
+        mqtt.publish(statusTopic.c_str(), "{\"state\":\"off\"}", true);
+    }
 }
 
 void loop() {
+    wifi_ensure_connected();
     if (!mqtt.connected())
         mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/bedroom/status", subscribeTopics);
     mqtt.loop();

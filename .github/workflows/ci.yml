@@ -29,3 +29,26 @@ jobs:
       - name: Run tests
         working-directory: hub/build
         run: ctest --output-on-failure
+
+  firmware:
+    name: Firmware Compile Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Create secrets.h for CI build
+        run: cp firmware/lib/smarthome/secrets.h.template firmware/lib/smarthome/secrets.h
+
+      - name: Compile all nodes
+        working-directory: firmware
+        run: pio run

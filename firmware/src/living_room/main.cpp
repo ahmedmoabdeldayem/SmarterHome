@@ -41,6 +41,10 @@
 
 WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
+// Two globals on the same pin: each claims its own ESP32 RMT channel (the GPIO
+// is shared). Both are initialised once in setup() to avoid per-call begin()
+// exhausting the 8 available RMT channels.
+IRCoolixAC   acSend(IR_TX_PIN);
 IRsend       irSend(IR_TX_PIN);
 
 unsigned long lastEnergyReport = 0;
@@ -66,7 +70,16 @@ void onMessage(char* topic, byte* payload, unsigned int length) {
 
     for (int i = 1; i <= 4; i++) {
         if (topicStr == "smarthome/living_room/light/" + String(i) + "/set") {
-            digitalWrite(relayPins[i - 1], strcmp(doc["state"], "on") == 0 ? LOW : HIGH);
+            const char* state = doc["state"] | "off";
+            bool on = strcmp(state, "on") == 0;
+            digitalWrite(relayPins[i - 1], on ? LOW : HIGH);
+
+            JsonDocument statusDoc;
+            statusDoc["state"] = on ? "on" : "off";
+            char statusBuf[32];
+            serializeJson(statusDoc, statusBuf);
+            mqtt.publish(("smarthome/living_room/light/" + String(i) + "/status").c_str(),
+                         statusBuf, true);
             return;
         }
     }
@@ -78,18 +91,16 @@ void onMessage(char* topic, byte* payload, unsigned int length) {
 }
 
 void sendACCommand(const char* mode, int temp) {
-    IRCoolixAC ac(IR_TX_PIN);
-    ac.begin();
     if (strcmp(mode, "off") == 0) {
-        ac.off();
+        acSend.off();
     } else {
-        ac.on();
-        ac.setTemp(temp);
-        if      (strcmp(mode, "cool") == 0) ac.setMode(kCoolixCool);
-        else if (strcmp(mode, "heat") == 0) ac.setMode(kCoolixHeat);
-        else                                ac.setMode(kCoolixFan);
+        acSend.on();
+        acSend.setTemp(temp);
+        if      (strcmp(mode, "cool") == 0) acSend.setMode(kCoolixCool);
+        else if (strcmp(mode, "heat") == 0) acSend.setMode(kCoolixHeat);
+        else                                acSend.setMode(kCoolixFan);
     }
-    ac.send();
+    acSend.send();
 }
 
 void sendTVCommand(const char* cmd) {
@@ -101,18 +112,21 @@ void sendTVCommand(const char* cmd) {
 }
 
 float readCurrentAmps() {
-    long sum = 0;
-    for (int i = 0; i < 100; i++) {
-        sum += analogRead(CURRENT_SENSOR_PIN);
+    // Sample over one full 50 Hz cycle (20 ms) and compute RMS for AC loads.
+    const int N = 200;
+    float sumSq = 0.0f;
+    for (int i = 0; i < N; i++) {
+        float voltage = (analogRead(CURRENT_SENSOR_PIN) / ADC_RESOLUTION) * ADC_REF_VOLTAGE;
+        float amps = (voltage - ACS712_OFFSET) / ACS712_SENSITIVITY;
+        sumSq += amps * amps;
         delayMicroseconds(100);
     }
-    float voltage = (sum / 100.0f / ADC_RESOLUTION) * ADC_REF_VOLTAGE;
-    return fabsf((voltage - ACS712_OFFSET) / ACS712_SENSITIVITY);
+    return sqrtf(sumSq / N);
 }
 
 void reportEnergy() {
     float amps  = readCurrentAmps();
-    float watts = amps * 220.0f;
+    float watts = amps * MAINS_VOLTAGE;
     JsonDocument doc;
     doc["amps"]  = roundf(amps  * 100) / 100.0f;
     doc["watts"] = roundf(watts * 10)  / 10.0f;
@@ -127,14 +141,26 @@ void setup() {
         pinMode(relayPins[i], OUTPUT);
         digitalWrite(relayPins[i], HIGH);
     }
+    // 11 dB attenuation required for ACS712: its zero-current output is 2.5 V,
+    // which exceeds the default 0 dB ceiling (~1.1 V) and would saturate the ADC.
+    analogSetPinAttenuation(CURRENT_SENSOR_PIN, ADC_11db);
+    acSend.begin();
     irSend.begin();
     wifi_connect();
     mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     mqtt.setCallback(onMessage);
     mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/living_room/status", subscribeTopics);
+
+    // Publish initial relay states as retained so the dashboard shows the correct
+    // state immediately after a power cycle (all relays start HIGH = off).
+    for (int i = 1; i <= 4; i++) {
+        String statusTopic = "smarthome/living_room/light/" + String(i) + "/status";
+        mqtt.publish(statusTopic.c_str(), "{\"state\":\"off\"}", true);
+    }
 }
 
 void loop() {
+    wifi_ensure_connected();
     if (!mqtt.connected())
         mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/living_room/status", subscribeTopics);
     mqtt.loop();

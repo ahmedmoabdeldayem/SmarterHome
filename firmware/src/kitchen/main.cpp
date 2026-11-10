@@ -52,8 +52,17 @@ void subscribeTopics() {
 void onMessage(char* topic, byte* payload, unsigned int length) {
     JsonDocument doc;
     if (deserializeJson(doc, payload, length) != DeserializationError::Ok) return;
-    if (strcmp(topic, "smarthome/kitchen/light/set") == 0)
-        digitalWrite(RELAY_LIGHT_PIN, strcmp(doc["state"], "on") == 0 ? LOW : HIGH);
+    if (strcmp(topic, "smarthome/kitchen/light/set") == 0) {
+        const char* state = doc["state"] | "off";
+        bool on = strcmp(state, "on") == 0;
+        digitalWrite(RELAY_LIGHT_PIN, on ? LOW : HIGH);
+
+        JsonDocument statusDoc;
+        statusDoc["state"] = on ? "on" : "off";
+        char statusBuf[32];
+        serializeJson(statusDoc, statusBuf);
+        mqtt.publish("smarthome/kitchen/light/status", statusBuf, true);
+    }
 }
 
 int readGasPPM() {
@@ -61,13 +70,16 @@ int readGasPPM() {
 }
 
 float readCurrentAmps() {
-    long sum = 0;
-    for (int i = 0; i < 100; i++) {
-        sum += analogRead(CURRENT_SENSOR_PIN);
+    // Sample over one full 50 Hz cycle (20 ms) and compute RMS for AC loads.
+    const int N = 200;
+    float sumSq = 0.0f;
+    for (int i = 0; i < N; i++) {
+        float voltage = (analogRead(CURRENT_SENSOR_PIN) / ADC_RESOLUTION) * ADC_REF_VOLTAGE;
+        float amps = (voltage - ACS712_OFFSET) / ACS712_SENSITIVITY;
+        sumSq += amps * amps;
         delayMicroseconds(100);
     }
-    float voltage = (sum / 100.0f / ADC_RESOLUTION) * ADC_REF_VOLTAGE;
-    return fabsf((voltage - ACS712_OFFSET) / ACS712_SENSITIVITY);
+    return sqrtf(sumSq / N);
 }
 
 void reportSensors() {
@@ -84,7 +96,7 @@ void reportSensors() {
         mqtt.publish("smarthome/kitchen/gas/status", buf);
     }
     {
-        float amps = readCurrentAmps(), watts = amps * 220.0f;
+        float amps = readCurrentAmps(), watts = amps * MAINS_VOLTAGE;
         JsonDocument doc;
         doc["amps"]  = roundf(amps  * 100) / 100.0f;
         doc["watts"] = roundf(watts * 10)  / 10.0f;
@@ -99,13 +111,21 @@ void setup() {
     pinMode(BUZZER_PIN,         OUTPUT); digitalWrite(BUZZER_PIN,      LOW);
     pinMode(GAS_SENSOR_PIN,     INPUT);
     pinMode(CURRENT_SENSOR_PIN, INPUT);
+    // 11 dB attenuation required for ACS712: its zero-current output is 2.5 V,
+    // which exceeds the default 0 dB ceiling (~1.1 V) and would saturate the ADC.
+    analogSetPinAttenuation(CURRENT_SENSOR_PIN, ADC_11db);
     wifi_connect();
     mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     mqtt.setCallback(onMessage);
     mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/kitchen/status", subscribeTopics);
+
+    // Publish initial relay state as retained so the dashboard reflects the correct
+    // state immediately after a power cycle (relay starts HIGH = off).
+    mqtt.publish("smarthome/kitchen/light/status", "{\"state\":\"off\"}", true);
 }
 
 void loop() {
+    wifi_ensure_connected();
     if (!mqtt.connected())
         mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/kitchen/status", subscribeTopics);
     mqtt.loop();
