@@ -95,49 +95,56 @@ public:
         auto now = std::chrono::steady_clock::now();
 
         for (size_t idx : it->second) {
-            // Hold the mutex for the entire rule processing block.
-            // rule.condition, rule.action_payload, rule.action_topic, and
-            // rule.last_fired are all fields of the same Rule struct. Although
-            // g_rules is never structurally modified after init (no push_back /
-            // erase), last_fired IS written here and read/written by concurrent
-            // callbacks, so the lock must cover all accesses to that rule.
-            std::lock_guard<std::mutex> lock(g_rules_mutex);
+            std::string pub_topic;
+            std::string pub_payload;
+            std::string rule_desc;
 
-            Rule& rule = g_rules[idx];
+            // Lock only to read/write rule state (condition, cooldown, last_fired).
+            // Publish is done outside the lock to avoid blocking other callbacks
+            // while Paho enqueues the outgoing message.
+            {
+                std::lock_guard<std::mutex> lock(g_rules_mutex);
 
-            // Check condition
-            bool should_fire = false;
-            try {
-                should_fire = rule.condition(payload);
-            } catch (const std::exception& e) {
-                LOG("ERROR", "Condition threw in rule '" << rule.description << "': " << e.what());
-                continue;
-            } catch (...) {
-                LOG("ERROR", "Condition threw unknown exception in rule '" << rule.description << "'");
-                continue;
+                Rule& rule = g_rules[idx];
+
+                // Check condition
+                bool should_fire = false;
+                try {
+                    should_fire = rule.condition(payload);
+                } catch (const std::exception& e) {
+                    LOG("ERROR", "Condition threw in rule '" << rule.description << "': " << e.what());
+                    continue;
+                } catch (...) {
+                    LOG("ERROR", "Condition threw unknown exception in rule '" << rule.description << "'");
+                    continue;
+                }
+                if (!should_fire) continue;
+
+                // Check cooldown
+                if (now - rule.last_fired < rule.cooldown) continue;
+                rule.last_fired = now;
+
+                // Build action payload
+                json action;
+                try {
+                    action = rule.action_payload(payload);
+                } catch (const std::exception& e) {
+                    LOG("ERROR", "action_payload threw in rule '" << rule.description << "': " << e.what());
+                    continue;
+                } catch (...) {
+                    LOG("ERROR", "action_payload threw unknown exception in rule '" << rule.description << "'");
+                    continue;
+                }
+
+                pub_topic   = rule.action_topic;
+                pub_payload = action.dump();
+                rule_desc   = rule.description;
             }
-            if (!should_fire) continue;
 
-            // Check cooldown
-            if (now - rule.last_fired < rule.cooldown) continue;
-            rule.last_fired = now;
-
-            // Build action payload
-            json action;
+            // Publish outside the lock
             try {
-                action = rule.action_payload(payload);
-            } catch (const std::exception& e) {
-                LOG("ERROR", "action_payload threw in rule '" << rule.description << "': " << e.what());
-                continue;
-            } catch (...) {
-                LOG("ERROR", "action_payload threw unknown exception in rule '" << rule.description << "'");
-                continue;
-            }
-
-            // Publish action
-            try {
-                client_.publish(rule.action_topic, action.dump(), 1, false);
-                LOG("RULE", rule.description);
+                client_.publish(pub_topic, pub_payload, 1, false);
+                LOG("RULE", rule_desc);
             } catch (const mqtt::exception& e) {
                 LOG("ERROR", "Publish failed: " << e.what());
             }

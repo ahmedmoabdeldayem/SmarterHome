@@ -14,8 +14,15 @@
 
 /**
  * Connect to Wi-Fi. Blocks until connected.
+ * Call once from setup().
  */
 void wifi_connect();
+
+/**
+ * Re-connect to Wi-Fi if the connection has dropped.
+ * Call from loop() before checking MQTT state.
+ */
+void wifi_ensure_connected();
 
 /**
  * Connect to the MQTT broker.

@@ -110,7 +110,7 @@ void checkDoorbell() {
 }
 
 void checkAutoLock() {
-    if (autoLockPending && !isLocked && millis() - unlockTime > AUTO_LOCK_DELAY_MS)
+    if (autoLockPending && millis() - unlockTime > AUTO_LOCK_DELAY_MS)
         setLock(true);
 }
 
@@ -135,6 +135,7 @@ void setup() {
 }
 
 void loop() {
+    wifi_ensure_connected();
     if (!mqtt.connected())
         mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/entrance/status", subscribeTopics);
     mqtt.loop();

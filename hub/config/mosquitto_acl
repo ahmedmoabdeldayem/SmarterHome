@@ -1,0 +1,30 @@
+# Mosquitto ACL — SmarterHome Hub
+# Place this file at: /etc/mosquitto/acls
+# Reference it in smarthome.conf with: acl_file /etc/mosquitto/acls
+#
+# Each node can only read/write its own subtopic.
+# The automation engine and dashboard clients get full access.
+
+user esp32-living-room
+topic readwrite smarthome/living_room/#
+
+user esp32-bedroom
+topic readwrite smarthome/bedroom/#
+
+user esp32-kitchen
+topic readwrite smarthome/kitchen/#
+
+user esp32-entrance
+topic readwrite smarthome/entrance/#
+
+# Automation engine needs to read all sensor topics and write to action/alert topics
+user smarthome-automation
+topic readwrite smarthome/#
+
+# Dashboard / mobile app — read all state, write only control topics
+user smarthome-dashboard
+topic read smarthome/#
+topic write smarthome/+/light/+/set
+topic write smarthome/+/ac/set
+topic write smarthome/+/tv/set
+topic write smarthome/entrance/door_lock/set

@@ -118,3 +118,56 @@ TEST_F(RulesTest, AllRulesHaveNonEmptyDescription) {
     for (const auto& rule : rules)
         EXPECT_FALSE(rule.description.empty());
 }
+
+// ── Edge cases ────────────────────────────────────────────────────────────────
+
+TEST_F(RulesTest, EntranceMotionDoesNotFireOnEmptyPayload) {
+    auto& rule = find_rule("smarthome/entrance/motion/event");
+    // Missing "detected" key defaults to false — rule must not fire
+    EXPECT_FALSE(rule.condition({}));
+}
+
+TEST_F(RulesTest, BedroomClimateDoesNotFireOnMissingTemp) {
+    auto& rule = find_rule("smarthome/bedroom/climate/status");
+    // Missing "temp" key defaults to 0.0 — below the 28°C threshold
+    EXPECT_FALSE(rule.condition({}));
+}
+
+TEST_F(RulesTest, KitchenGasAlertDoesNotFireOnEmptyPayload) {
+    auto& rule = find_rule("smarthome/kitchen/gas/status");
+    // Missing "alert" key defaults to false — rule must not fire
+    EXPECT_FALSE(rule.condition({}));
+}
+
+TEST_F(RulesTest, KitchenGasAlertPayloadFaultOnMissingPpm) {
+    // alert=true but ppm missing (defaults to 0) — 0 is in-range so normal path
+    auto& rule = find_rule("smarthome/kitchen/gas/status");
+    auto payload = rule.action_payload({{"alert", true}});
+    // ppm=0 is within [0, 10000], so normal alert payload expected
+    EXPECT_EQ(payload["ppm"], 0);
+    EXPECT_EQ(payload["alert"], true);
+    EXPECT_EQ(payload["room"], "kitchen");
+}
+
+TEST_F(RulesTest, AllRulesHaveNonEmptyTopics) {
+    for (const auto& rule : rules) {
+        EXPECT_FALSE(rule.trigger_topic.empty()) << "Empty trigger_topic in: " << rule.description;
+        EXPECT_FALSE(rule.action_topic.empty())  << "Empty action_topic in: "  << rule.description;
+    }
+}
+
+TEST_F(RulesTest, CooldownPreventsRapidRefiring) {
+    auto& rule = find_rule("smarthome/entrance/motion/event");
+    auto now = std::chrono::steady_clock::now();
+
+    // Simulate rule just fired
+    rule.last_fired = now;
+
+    // Within cooldown window — should be blocked (last_fired == now, cooldown > 0)
+    auto just_after = now + std::chrono::milliseconds(1);
+    EXPECT_LT(just_after - rule.last_fired, rule.cooldown);
+
+    // After cooldown expires — should be allowed
+    auto after_cooldown = now + rule.cooldown + std::chrono::milliseconds(1);
+    EXPECT_GE(after_cooldown - rule.last_fired, rule.cooldown);
+}

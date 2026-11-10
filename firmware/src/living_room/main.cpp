@@ -18,7 +18,6 @@
 
 #include <smarthome.h>
 #include <IRremoteESP8266.h>
-#include <IRsend.h>
 #include <ir_Coolix.h>
 #include <ArduinoJson.h>
 
@@ -41,7 +40,8 @@
 
 WiFiClient   wifiClient;
 PubSubClient mqtt(wifiClient);
-IRsend       irSend(IR_TX_PIN);
+// IRCoolixAC inherits IRsend, so a single object handles both AC and raw NEC commands.
+IRCoolixAC   acSend(IR_TX_PIN);
 
 unsigned long lastEnergyReport = 0;
 const int relayPins[4] = {RELAY_1, RELAY_2, RELAY_3, RELAY_4};
@@ -66,7 +66,16 @@ void onMessage(char* topic, byte* payload, unsigned int length) {
 
     for (int i = 1; i <= 4; i++) {
         if (topicStr == "smarthome/living_room/light/" + String(i) + "/set") {
-            digitalWrite(relayPins[i - 1], strcmp(doc["state"], "on") == 0 ? LOW : HIGH);
+            const char* state = doc["state"] | "off";
+            bool on = strcmp(state, "on") == 0;
+            digitalWrite(relayPins[i - 1], on ? LOW : HIGH);
+
+            JsonDocument statusDoc;
+            statusDoc["state"] = on ? "on" : "off";
+            char statusBuf[32];
+            serializeJson(statusDoc, statusBuf);
+            mqtt.publish(("smarthome/living_room/light/" + String(i) + "/status").c_str(),
+                         statusBuf, true);
             return;
         }
     }
@@ -78,41 +87,42 @@ void onMessage(char* topic, byte* payload, unsigned int length) {
 }
 
 void sendACCommand(const char* mode, int temp) {
-    IRCoolixAC ac(IR_TX_PIN);
-    ac.begin();
     if (strcmp(mode, "off") == 0) {
-        ac.off();
+        acSend.off();
     } else {
-        ac.on();
-        ac.setTemp(temp);
-        if      (strcmp(mode, "cool") == 0) ac.setMode(kCoolixCool);
-        else if (strcmp(mode, "heat") == 0) ac.setMode(kCoolixHeat);
-        else                                ac.setMode(kCoolixFan);
+        acSend.on();
+        acSend.setTemp(temp);
+        if      (strcmp(mode, "cool") == 0) acSend.setMode(kCoolixCool);
+        else if (strcmp(mode, "heat") == 0) acSend.setMode(kCoolixHeat);
+        else                                acSend.setMode(kCoolixFan);
     }
-    ac.send();
+    acSend.send();
 }
 
 void sendTVCommand(const char* cmd) {
     if      (strcmp(cmd, "on")       == 0 ||
-             strcmp(cmd, "off")      == 0) irSend.sendNEC(0xE0E040BF, 32);
-    else if (strcmp(cmd, "vol_up")   == 0) irSend.sendNEC(0xE0E0E01F, 32);
-    else if (strcmp(cmd, "vol_down") == 0) irSend.sendNEC(0xE0E0D02F, 32);
-    else if (strcmp(cmd, "mute")     == 0) irSend.sendNEC(0xE0E0F00F, 32);
+             strcmp(cmd, "off")      == 0) acSend.sendNEC(0xE0E040BF, 32);
+    else if (strcmp(cmd, "vol_up")   == 0) acSend.sendNEC(0xE0E0E01F, 32);
+    else if (strcmp(cmd, "vol_down") == 0) acSend.sendNEC(0xE0E0D02F, 32);
+    else if (strcmp(cmd, "mute")     == 0) acSend.sendNEC(0xE0E0F00F, 32);
 }
 
 float readCurrentAmps() {
-    long sum = 0;
-    for (int i = 0; i < 100; i++) {
-        sum += analogRead(CURRENT_SENSOR_PIN);
+    // Sample over one full 50 Hz cycle (20 ms) and compute RMS for AC loads.
+    const int N = 200;
+    float sumSq = 0.0f;
+    for (int i = 0; i < N; i++) {
+        float voltage = (analogRead(CURRENT_SENSOR_PIN) / ADC_RESOLUTION) * ADC_REF_VOLTAGE;
+        float amps = (voltage - ACS712_OFFSET) / ACS712_SENSITIVITY;
+        sumSq += amps * amps;
         delayMicroseconds(100);
     }
-    float voltage = (sum / 100.0f / ADC_RESOLUTION) * ADC_REF_VOLTAGE;
-    return fabsf((voltage - ACS712_OFFSET) / ACS712_SENSITIVITY);
+    return sqrtf(sumSq / N);
 }
 
 void reportEnergy() {
     float amps  = readCurrentAmps();
-    float watts = amps * 220.0f;
+    float watts = amps * MAINS_VOLTAGE;
     JsonDocument doc;
     doc["amps"]  = roundf(amps  * 100) / 100.0f;
     doc["watts"] = roundf(watts * 10)  / 10.0f;
@@ -127,7 +137,7 @@ void setup() {
         pinMode(relayPins[i], OUTPUT);
         digitalWrite(relayPins[i], HIGH);
     }
-    irSend.begin();
+    acSend.begin();
     wifi_connect();
     mqtt.setServer(MQTT_BROKER, MQTT_PORT);
     mqtt.setCallback(onMessage);
@@ -135,6 +145,7 @@ void setup() {
 }
 
 void loop() {
+    wifi_ensure_connected();
     if (!mqtt.connected())
         mqtt_connect(mqtt, MQTT_CLIENT_ID, "smarthome/living_room/status", subscribeTopics);
     mqtt.loop();

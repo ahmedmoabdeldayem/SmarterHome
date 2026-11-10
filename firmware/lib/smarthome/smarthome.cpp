@@ -10,6 +10,13 @@ void wifi_connect() {
     Serial.println("\nWiFi connected: " + WiFi.localIP().toString());
 }
 
+void wifi_ensure_connected() {
+    if (WiFi.status() == WL_CONNECTED) return;
+    Serial.println("WiFi lost, reconnecting...");
+    WiFi.disconnect();
+    wifi_connect();
+}
+
 void mqtt_connect(PubSubClient& client,
                   const char*   client_id,
                   const char*   status_topic,
@@ -17,7 +24,7 @@ void mqtt_connect(PubSubClient& client,
     while (!client.connected()) {
         Serial.printf("Connecting to MQTT as %s...", client_id);
         if (client.connect(client_id,
-                           nullptr, nullptr,
+                           MQTT_USER, MQTT_PASSWORD,
                            status_topic, 1, true,
                            "{\"online\":false}")) {
             Serial.println("connected");
