@@ -124,19 +124,19 @@ TEST_F(RulesTest, AllRulesHaveNonEmptyDescription) {
 TEST_F(RulesTest, EntranceMotionDoesNotFireOnEmptyPayload) {
     auto& rule = find_rule("smarthome/entrance/motion/event");
     // Missing "detected" key defaults to false — rule must not fire
-    EXPECT_FALSE(rule.condition({}));
+    EXPECT_FALSE(rule.condition(json::object()));
 }
 
 TEST_F(RulesTest, BedroomClimateDoesNotFireOnMissingTemp) {
     auto& rule = find_rule("smarthome/bedroom/climate/status");
     // Missing "temp" key defaults to 0.0 — below the 28°C threshold
-    EXPECT_FALSE(rule.condition({}));
+    EXPECT_FALSE(rule.condition(json::object()));
 }
 
 TEST_F(RulesTest, KitchenGasAlertDoesNotFireOnEmptyPayload) {
     auto& rule = find_rule("smarthome/kitchen/gas/status");
     // Missing "alert" key defaults to false — rule must not fire
-    EXPECT_FALSE(rule.condition({}));
+    EXPECT_FALSE(rule.condition(json::object()));
 }
 
 TEST_F(RulesTest, KitchenGasAlertPayloadFaultOnMissingPpm) {
